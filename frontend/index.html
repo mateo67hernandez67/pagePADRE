@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Panel de automatizaciones</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; }
+  .scripts { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  button.script-btn {
+    background: #2d7d46; color: white; border: none; padding: 10px 18px;
+    border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  button.script-btn:disabled { background: #555; cursor: not-allowed; }
+  .job-card {
+    background: #262626; border: 1px solid #3a3a3a; border-radius: 8px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .estado { font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+  .estado.pendiente, .estado.ejecutando { background: #3a5f8a; }
+  .estado.esperando_confirmacion { background: #a67c00; }
+  .estado.finalizado { background: #2d7d46; }
+  .estado.error { background: #a33; }
+  pre.terminal {
+    background: #111; color: #0f0; padding: 12px; border-radius: 6px;
+    max-height: 300px; overflow-y: auto; font-size: 13px; white-space: pre-wrap;
+  }
+  .acciones { margin-top: 10px; display: flex; gap: 10px; }
+  .acciones button { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; }
+  .btn-enviar { background: #2d7d46; color: white; }
+  .btn-reintentar { background: #555; color: white; }
+  .aviso-correo { margin-top: 8px; font-size: 13px; color: #7fd67f; }
+</style>
+</head>
+<body>
+
+<h1>Panel de automatizaciones</h1>
+<div id="scripts" class="scripts">Cargando scripts...</div>
+<div id="jobs"></div>
+
+<script>
+const BACKEND_URL = "https://https://candid-mochi-ccd7c4.netlify.app/";
+const API_KEY = "TU_TOKEN_SECRETO"; // el mismo que valida el backend
+
+const jobsActivos = {}; // job_id -> intervalId
+
+async function apiFetch(path, opciones = {}) {
+  const resp = await fetch(BACKEND_URL + path, {
+    ...opciones,
+    headers: { "X-API-Key": API_KEY, ...(opciones.headers || {}) },
+  });
+  if (!resp.ok) throw new Error(`Error ${resp.status} en ${path}`);
+  return resp.json();
+}
+
+async function cargarScripts() {
+  const scripts = await apiFetch("/scripts");
+  const cont = document.getElementById("scripts");
+  cont.innerHTML = "";
+  scripts.forEach(s => {
+    const btn = document.createElement("button");
+    btn.className = "script-btn";
+    btn.textContent = s.nombre;
+    btn.onclick = () => lanzarJob(s._id, btn);
+    cont.appendChild(btn);
+  });
+}
+
+async function lanzarJob(scriptId, btn) {
+  btn.disabled = true;
+  try {
+    const { job_id } = await apiFetch(`/jobs?script_id=${scriptId}`, { method: "POST" });
+    crearTarjetaJob(job_id);
+    monitorearJob(job_id);
+  } finally {
+    setTimeout(() => btn.disabled = false, 2000);
+  }
+}
+
+function crearTarjetaJob(jobId) {
+  const div = document.createElement("div");
+  div.className = "job-card";
+  div.id = `job-${jobId}`;
+  div.innerHTML = `
+    <div><strong>Job:</strong> ${jobId} <span class="estado pendiente" id="estado-${jobId}">pendiente</span></div>
+    <pre class="terminal" id="terminal-${jobId}"></pre>
+    <div id="acciones-${jobId}"></div>
+    <div id="aviso-${jobId}"></div>
+  `;
+  document.getElementById("jobs").prepend(div);
+}
+
+function monitorearJob(jobId) {
+  jobsActivos[jobId] = setInterval(async () => {
+    const job = await apiFetch(`/jobs/${jobId}`);
+    actualizarTarjeta(jobId, job);
+
+    if (job.estado === "finalizado" || (job.estado === "error" && job.accion_usuario)) {
+      clearInterval(jobsActivos[jobId]);
+    }
+  }, 2500);
+}
+
+function actualizarTarjeta(jobId, job) {
+  const estadoEl = document.getElementById(`estado-${jobId}`);
+  estadoEl.textContent = job.estado;
+  estadoEl.className = `estado ${job.estado}`;
+
+  const terminal = document.getElementById(`terminal-${jobId}`);
+  terminal.textContent = job.logs.join("\n");
+  terminal.scrollTop = terminal.scrollHeight;
+
+  const acciones = document.getElementById(`acciones-${jobId}`);
+  const aviso = document.getElementById(`aviso-${jobId}`);
+
+  if (job.estado === "error") {
+    aviso.innerHTML = `<div style="color:#f88">Error: ${job.error_mensaje || "sin detalle"}</div>`;
+  }
+
+  // Muestra los botones de decisión solo si terminó bien y aún no decidiste nada
+  if (job.estado === "esperando_confirmacion" && !job.accion_usuario) {
+    acciones.innerHTML = `
+      <div class="acciones">
+        <button class="btn-enviar" onclick="decidir('${jobId}','enviar_correo')">Enviar por correo</button>
+        <button class="btn-reintentar" onclick="decidir('${jobId}','reejecutar_sin_correo')">Reejecutar sin enviar</button>
+      </div>
+    `;
+  } else {
+    acciones.innerHTML = "";
+  }
+
+  if (job.estado_correo === "enviado") {
+    aviso.innerHTML = `<div class="aviso-correo">✔ Correo enviado el ${new Date(job.correo_enviado_en).toLocaleString()}</div>`;
+  } else if (job.estado_correo === "error_envio") {
+    aviso.innerHTML = `<div style="color:#f88">✘ Falló el envío del correo</div>`;
+  }
+}
+
+async function decidir(jobId, accion) {
+  await apiFetch(`/jobs/${jobId}/action?accion=${accion}`, { method: "POST" });
+  document.getElementById(`acciones-${jobId}`).innerHTML = "Procesando...";
+  if (!jobsActivos[jobId]) monitorearJob(jobId); // por si el intervalo ya se había detenido
+}
+
+cargarScripts();
+</script>
+</body>
+</html>
