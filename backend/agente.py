@@ -3,7 +3,7 @@ import subprocess
 import requests
 
 BACKEND_URL = "https://pagepadre.onrender.com"
-PC_ID = "pc-oficina-1"
+PC_ID = "pc-andres"
 INTERVALO_SONDEO = 8  # segundos
 
 def ejecutar_job(job_id: str, comando: str):
