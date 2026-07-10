@@ -8,7 +8,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://candid-mochi-ccd7c4.netlify.app"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
