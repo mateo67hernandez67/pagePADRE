@@ -9,8 +9,8 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://candid-mochi-ccd7c4.netlify.app/"],
-    allow_methods=["https://candid-mochi-ccd7c4.netlify.app/"],
-    allow_headers=["https://candid-mochi-ccd7c4.netlify.app/"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 def serialize(doc):
