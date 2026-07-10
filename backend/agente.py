@@ -2,7 +2,7 @@ import time
 import subprocess
 import requests
 
-BACKEND_URL = "https://https://candid-mochi-ccd7c4.netlify.app/"
+BACKEND_URL = "https://pagepadre.onrender.com"
 PC_ID = "pc-oficina-1"
 INTERVALO_SONDEO = 8  # segundos
 
