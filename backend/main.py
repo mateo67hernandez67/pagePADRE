@@ -53,15 +53,24 @@ async def ver_job(job_id: str):
     if not job:
         raise HTTPException(404, "Job no encontrado")
     logs = await logs_col.find({"job_id": ObjectId(job_id)}).sort("timestamp", 1).to_list(1000)
+    script = await scripts_col.find_one({"_id": job["script_id"]})
     job = serialize(job)
     job["script_id"] = str(job["script_id"])
+    job["nombre_script"] = script["nombre"] if script else "Desconocido"
     job["logs"] = [l["linea"] for l in logs]
     return job
 
 @app.get("/jobs")
 async def listar_jobs(limite: int = 20):
     jobs = await jobs_col.find().sort("creado_en", -1).to_list(limite)
-    return [serialize(j) | {"script_id": str(j["script_id"])} for j in jobs]
+    resultado = []
+    for j in jobs:
+        script = await scripts_col.find_one({"_id": j["script_id"]})
+        j = serialize(j)
+        j["script_id"] = str(j["script_id"])
+        j["nombre_script"] = script["nombre"] if script else "Desconocido"
+        resultado.append(j)
+    return resultado
 
 @app.post("/jobs/{job_id}/action")
 async def confirmar_accion(job_id: str, accion: str):
@@ -126,5 +135,29 @@ async def confirmar_correo_enviado(job_id: str, exito: bool):
             "correo_enviado_en": datetime.utcnow() if exito else None,
             "estado": "finalizado",
         }}
+    )
+    return {"ok": True}
+
+@app.post("/jobs/{job_id}/cancelar")
+async def cancelar_job(job_id: str):
+    job = await jobs_col.find_one({"_id": ObjectId(job_id)})
+    if not job:
+        raise HTTPException(404, "Job no encontrado")
+
+    if job["estado"] == "pendiente":
+        nuevo_estado = "cancelado"  # nunca llegó a arrancar, se cancela directo
+    elif job["estado"] == "ejecutando":
+        nuevo_estado = "cancelando"  # el agente lo va a detectar y matar el proceso
+    else:
+        raise HTTPException(400, "Este job ya no se puede cancelar")
+
+    await jobs_col.update_one({"_id": ObjectId(job_id)}, {"$set": {"estado": nuevo_estado}})
+    return {"ok": True}
+
+@app.post("/agente/jobs/{job_id}/cancelado")
+async def confirmar_cancelado(job_id: str):
+    await jobs_col.update_one(
+        {"_id": ObjectId(job_id)},
+        {"$set": {"estado": "cancelado", "finalizado_en": datetime.utcnow()}}
     )
     return {"ok": True}

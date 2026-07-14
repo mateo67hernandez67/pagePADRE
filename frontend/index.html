@@ -21,6 +21,9 @@
   .estado.esperando_confirmacion { background: #a67c00; }
   .estado.finalizado { background: #2d7d46; }
   .estado.error { background: #a33; }
+  .estado.cancelando { background: #8a5a3a; }
+  .estado.cancelado { background: #666; }
+  .btn-cancelar { background: #a33; color: white; }
   pre.terminal {
     background: #111; color: #0f0; padding: 12px; border-radius: 6px;
     max-height: 300px; overflow-y: auto; font-size: 13px; white-space: pre-wrap;
@@ -61,28 +64,28 @@ async function cargarScripts() {
     const btn = document.createElement("button");
     btn.className = "script-btn";
     btn.textContent = s.nombre;
-    btn.onclick = () => lanzarJob(s._id, btn);
+    btn.onclick = () => lanzarJob(s._id, s.nombre, btn);
     cont.appendChild(btn);
   });
 }
 
-async function lanzarJob(scriptId, btn) {
+async function lanzarJob(scriptId, nombreScript, btn) {
   btn.disabled = true;
   try {
     const { job_id } = await apiFetch(`/jobs?script_id=${scriptId}`, { method: "POST" });
-    crearTarjetaJob(job_id);
+    crearTarjetaJob(job_id, nombreScript);
     monitorearJob(job_id);
   } finally {
     setTimeout(() => btn.disabled = false, 2000);
   }
 }
 
-function crearTarjetaJob(jobId) {
+function crearTarjetaJob(jobId, nombreScript = "") {
   const div = document.createElement("div");
   div.className = "job-card";
   div.id = `job-${jobId}`;
   div.innerHTML = `
-    <div><strong>Job:</strong> ${jobId} <span class="estado pendiente" id="estado-${jobId}">pendiente</span></div>
+    <div><strong>${nombreScript}</strong> — Job: ${jobId} <span class="estado pendiente" id="estado-${jobId}">pendiente</span></div>
     <pre class="terminal" id="terminal-${jobId}"></pre>
     <div id="acciones-${jobId}"></div>
     <div id="aviso-${jobId}"></div>
@@ -90,12 +93,25 @@ function crearTarjetaJob(jobId) {
   document.getElementById("jobs").prepend(div);
 }
 
+const ESTADOS_ACTIVOS = ["pendiente", "ejecutando", "esperando_confirmacion", "cancelando"];
+
+async function cargarJobsRecientes() {
+  const jobs = await apiFetch("/jobs?limite=20");
+  for (const job of jobs) {
+    crearTarjetaJob(job._id, job.nombre_script);
+    actualizarTarjeta(job._id, job);
+    if (ESTADOS_ACTIVOS.includes(job.estado)) {
+      monitorearJob(job._id);
+    }
+  }
+}
+
 function monitorearJob(jobId) {
   jobsActivos[jobId] = setInterval(async () => {
     const job = await apiFetch(`/jobs/${jobId}`);
     actualizarTarjeta(jobId, job);
 
-    if (job.estado === "finalizado" || (job.estado === "error" && job.accion_usuario)) {
+    if (job.estado === "finalizado" || job.estado === "cancelado" || (job.estado === "error" && job.accion_usuario)) {
       clearInterval(jobsActivos[jobId]);
     }
   }, 2500);
@@ -117,8 +133,13 @@ function actualizarTarjeta(jobId, job) {
     aviso.innerHTML = `<div style="color:#f88">Error: ${job.error_mensaje || "sin detalle"}</div>`;
   }
 
-  // Muestra los botones de decisión solo si terminó bien y aún no decidiste nada
-  if (job.estado === "esperando_confirmacion" && !job.accion_usuario) {
+  if (job.estado === "pendiente" || job.estado === "ejecutando") {
+    acciones.innerHTML = `
+      <div class="acciones">
+        <button class="btn-cancelar" onclick="cancelar('${jobId}')">Cancelar automatización</button>
+      </div>
+    `;
+  } else if (job.estado === "esperando_confirmacion" && !job.accion_usuario) {
     acciones.innerHTML = `
       <div class="acciones">
         <button class="btn-enviar" onclick="decidir('${jobId}','enviar_correo')">Enviar por correo</button>
@@ -129,11 +150,22 @@ function actualizarTarjeta(jobId, job) {
     acciones.innerHTML = "";
   }
 
+  if (job.estado === "cancelando") {
+    aviso.innerHTML = `<div style="color:#dda">Cancelando... esperando a que el agente detenga el proceso.</div>`;
+  } else if (job.estado === "cancelado") {
+    aviso.innerHTML = `<div style="color:#aaa">Automatización cancelada por el usuario.</div>`;
+  }
+
   if (job.estado_correo === "enviado") {
     aviso.innerHTML = `<div class="aviso-correo">✔ Correo enviado el ${new Date(job.correo_enviado_en).toLocaleString()}</div>`;
   } else if (job.estado_correo === "error_envio") {
     aviso.innerHTML = `<div style="color:#f88">✘ Falló el envío del correo</div>`;
   }
+}
+
+async function cancelar(jobId) {
+  await apiFetch(`/jobs/${jobId}/cancelar`, { method: "POST" });
+  document.getElementById(`acciones-${jobId}`).innerHTML = "Cancelando...";
 }
 
 async function decidir(jobId, accion) {
@@ -143,6 +175,7 @@ async function decidir(jobId, accion) {
 }
 
 cargarScripts();
+cargarJobsRecientes();
 </script>
 </body>
 </html>
