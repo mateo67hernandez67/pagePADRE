@@ -2,180 +2,555 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Panel de automatizaciones</title>
 <style>
-  body { font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; margin: 0; padding: 24px; }
-  h1 { font-size: 20px; }
-  .scripts { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
-  button.script-btn {
-    background: #2d7d46; color: white; border: none; padding: 10px 18px;
-    border-radius: 6px; cursor: pointer; font-size: 14px;
+  /* ── Reset y base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #161618;
+    color: #d4d4d8;
+    padding: 24px 20px;
+    min-height: 100vh;
   }
-  button.script-btn:disabled { background: #555; cursor: not-allowed; }
+
+  /* ── Header ── */
+  .header { margin-bottom: 28px; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #f4f4f5; margin-bottom: 4px; }
+  .header p  { font-size: 13px; color: #71717a; }
+
+  /* ── Sección de scripts ── */
+  .seccion-titulo {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.8px;
+    color: #71717a; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .scripts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+
+  /* ── Tarjeta de script (botón) ── */
+  .script-card {
+    background: #1c1c1f;
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .script-card:hover:not(:disabled) {
+    border-color: #3f3f46;
+    background: #222226;
+  }
+  .script-card:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .script-card .sc-nombre {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f4f4f5;
+    line-height: 1.3;
+  }
+  .script-card .sc-desc {
+    font-size: 12px;
+    color: #71717a;
+    line-height: 1.4;
+  }
+  .script-card .sc-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .script-card .sc-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    align-self: flex-start;
+    letter-spacing: 0.2px;
+  }
+  .badge-correo     { background: #1e3a5f; color: #7eb8f7; }
+  .badge-automatico { background: #3a2e00; color: #f0c040; }
+  .badge-ninguno    { background: #27272a; color: #71717a; }
+  .sc-dep-warning {
+    font-size: 11px;
+    color: #f0a040;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── Indicador de estado del agente ── */
+  .agente-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #71717a;
+    margin-bottom: 20px;
+    padding: 5px 10px;
+    background: #1c1c1f;
+    border: 1px solid #27272a;
+    border-radius: 20px;
+  }
+  .agente-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #71717a;
+    transition: background 0.3s;
+  }
+  .agente-dot.activo  { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+  .agente-dot.inactivo { background: #ef4444; }
+
+  /* ── Tarjetas de job ── */
+  .jobs-lista { display: flex; flex-direction: column; gap: 14px; }
   .job-card {
-    background: #262626; border: 1px solid #3a3a3a; border-radius: 8px;
-    padding: 16px; margin-bottom: 16px;
+    background: #1c1c1f;
+    border: 1px solid #27272a;
+    border-radius: 10px;
+    padding: 16px;
+    transition: border-color 0.2s;
   }
-  .estado { font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-  .estado.pendiente, .estado.ejecutando { background: #3a5f8a; }
-  .estado.esperando_confirmacion { background: #a67c00; }
-  .estado.finalizado { background: #2d7d46; }
-  .estado.error { background: #a33; }
-  .estado.cancelando { background: #8a5a3a; }
-  .estado.cancelado { background: #666; }
-  .btn-cancelar { background: #a33; color: white; }
+  .job-card.activo { border-color: #3f3f46; }
+
+  .job-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .job-nombre { font-weight: 600; font-size: 15px; color: #f4f4f5; }
+  .job-id-label { font-size: 11px; color: #52525b; margin-left: auto; font-family: monospace; }
+
+  /* ── Chips de estado ── */
+  .estado {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    padding: 3px 9px; border-radius: 20px; text-transform: uppercase;
+  }
+  .estado.pendiente             { background: #1e3a5f; color: #7eb8f7; }
+  .estado.ejecutando            { background: #14532d; color: #86efac; }
+  .estado.esperando_confirmacion{ background: #451a03; color: #fdba74; }
+  .estado.finalizado            { background: #14532d; color: #86efac; }
+  .estado.error                 { background: #450a0a; color: #fca5a5; }
+  .estado.cancelando            { background: #292524; color: #d6d3d1; }
+  .estado.cancelado             { background: #27272a; color: #71717a; }
+
+  /* ── Terminal ── */
   pre.terminal {
-    background: #111; color: #0f0; padding: 12px; border-radius: 6px;
-    max-height: 300px; overflow-y: auto; font-size: 13px; white-space: pre-wrap;
+    background: #0d0d0f;
+    color: #22c55e;
+    padding: 12px 14px;
+    border-radius: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border: 1px solid #18181b;
+    margin-bottom: 12px;
   }
-  .acciones { margin-top: 10px; display: flex; gap: 10px; }
-  .acciones button { padding: 8px 14px; border-radius: 6px; border: none; cursor: pointer; }
-  .btn-enviar { background: #2d7d46; color: white; }
-  .btn-reintentar { background: #555; color: white; }
-  .aviso-correo { margin-top: 8px; font-size: 13px; color: #7fd67f; }
+  pre.terminal:empty { display: none; }
+
+  /* ── Acciones del job ── */
+  .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .acciones button {
+    padding: 8px 16px; border-radius: 7px; border: none;
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: opacity 0.15s;
+  }
+  .acciones button:hover { opacity: 0.85; }
+  .btn-cancelar  { background: #7f1d1d; color: #fca5a5; }
+  .btn-enviar    { background: #14532d; color: #86efac; }
+  .btn-reintentar{ background: #27272a; color: #d4d4d8; }
+
+  /* ── Avisos ── */
+  .aviso {
+    font-size: 13px;
+    padding: 6px 0;
+    min-height: 22px;
+  }
+  .aviso-ok    { color: #86efac; }
+  .aviso-error { color: #fca5a5; }
+  .aviso-warn  { color: #fdba74; }
+  .aviso-info  { color: #71717a; }
+
+  /* ── Tiempo transcurrido ── */
+  .job-tiempo { font-size: 11px; color: #52525b; margin-left: 4px; }
+
+  /* ── Animación pulso para ejecutando ── */
+  @keyframes pulso { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .pulsando { animation: pulso 1.5s ease-in-out infinite; }
+
+  /* ── Spinner ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid #3f3f46; border-top-color: #86efac;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
 </style>
 </head>
 <body>
 
-<h1>Panel de automatizaciones</h1>
-<div id="scripts" class="scripts">Cargando scripts...</div>
-<div id="jobs"></div>
+<div class="header">
+  <h1>Panel de automatizaciones</h1>
+  <p>Ejecuta y monitorea scripts remotos desde el navegador.</p>
+</div>
+
+<div class="agente-status" id="agente-status">
+  <span class="agente-dot" id="agente-dot"></span>
+  <span id="agente-texto">Verificando agente...</span>
+</div>
+
+<p class="seccion-titulo">Scripts disponibles</p>
+<div id="scripts" class="scripts-grid">
+  <div style="color:#52525b;font-size:13px">Cargando...</div>
+</div>
+
+<p class="seccion-titulo">Ejecuciones recientes</p>
+<div id="jobs" class="jobs-lista"></div>
 
 <script>
 const BACKEND_URL = "https://pagepadre.onrender.com";
-const API_KEY = "TU_TOKEN_SECRETO"; // el mismo que valida el backend
 
-const jobsActivos = {}; // job_id -> intervalId
+// job_id → intervalId
+const jobsActivos = {};
+// nombre_script → estado (para verificar dependencias en el frontend)
+const ultimosFinalizados = {};
 
+// ─── API helper ─────────────────────────────────────────────────────────────
 async function apiFetch(path, opciones = {}) {
-  const resp = await fetch(BACKEND_URL + path, {
-    ...opciones,
-    headers: { "X-API-Key": API_KEY, ...(opciones.headers || {}) },
-  });
+  const resp = await fetch(BACKEND_URL + path, opciones);
   if (!resp.ok) throw new Error(`Error ${resp.status} en ${path}`);
   return resp.json();
 }
 
-async function cargarScripts() {
-  const scripts = await apiFetch("/scripts");
-  const cont = document.getElementById("scripts");
-  cont.innerHTML = "";
-  scripts.forEach(s => {
-    const btn = document.createElement("button");
-    btn.className = "script-btn";
-    btn.textContent = s.nombre;
-    btn.onclick = () => lanzarJob(s._id, s.nombre, btn);
-    cont.appendChild(btn);
-  });
-}
-
-async function lanzarJob(scriptId, nombreScript, btn) {
-  btn.disabled = true;
+// ─── Verificar si el agente está activo (hay un job ejecutando recientemente) ──
+async function verificarAgente() {
   try {
-    const { job_id } = await apiFetch(`/jobs?script_id=${scriptId}`, { method: "POST" });
-    crearTarjetaJob(job_id, nombreScript);
-    monitorearJob(job_id);
-  } finally {
-    setTimeout(() => btn.disabled = false, 2000);
+    const jobs = await apiFetch("/jobs?limite=10");
+    const ahora = Date.now();
+    const activo = jobs.some(j => {
+      if (!["ejecutando", "esperando_confirmacion", "pendiente"].includes(j.estado)) return false;
+      const ts = j.iniciado_en ? new Date(j.iniciado_en).getTime() : 0;
+      return ahora - ts < 5 * 60 * 1000; // activo si tiene job en los últimos 5 min
+    });
+    // También consideramos activo si hay un job pendiente (el agente podría estar leyendo)
+    const hayPendiente = jobs.some(j => j.estado === "pendiente");
+
+    const dot   = document.getElementById("agente-dot");
+    const texto = document.getElementById("agente-texto");
+    if (activo || hayPendiente) {
+      dot.className   = "agente-dot activo";
+      texto.textContent = "Agente conectado";
+    } else {
+      dot.className   = "agente-dot";
+      texto.textContent = "Agente en espera";
+    }
+  } catch (e) {
+    const dot = document.getElementById("agente-dot");
+    dot.className = "agente-dot inactivo";
+    document.getElementById("agente-texto").textContent = "Sin conexión al backend";
   }
 }
 
-function crearTarjetaJob(jobId, nombreScript = "") {
+// ─── Carga del catálogo de scripts ──────────────────────────────────────────
+async function cargarScripts() {
+  try {
+    const scripts = await apiFetch("/scripts");
+    const cont = document.getElementById("scripts");
+    cont.innerHTML = "";
+
+    // Construir mapa nombre → estado de hoy
+    const hoy = new Date().toISOString().slice(0, 10);
+    let jobsHoy = [];
+    try {
+      const todos = await apiFetch("/jobs?limite=100");
+      jobsHoy = todos.filter(j => {
+        const ts = j.finalizado_en || j.creado_en || "";
+        return ts.slice(0, 10) === hoy && j.estado === "finalizado";
+      });
+    } catch(e) {}
+
+    const finalizadosHoy = new Set(jobsHoy.map(j => j.nombre_script));
+
+    scripts.forEach(s => {
+      const tipo = s.tipo_envio || "ninguno";
+      const labelTexto = {
+        correo:     "✉ Con confirmación de correo",
+        automatico: "⚡ Envío automático",
+        ninguno:    "Sin envío",
+      }[tipo] || "Sin envío";
+
+      const deps = s.dependencias || [];
+      const depsFaltantes = deps.filter(d => !finalizadosHoy.has(d));
+      const bloqueado = depsFaltantes.length > 0;
+
+      const depHtml = bloqueado
+        ? `<span class="sc-dep-warning">⚠ Requiere: ${depsFaltantes.join(", ")}</span>`
+        : (deps.length > 0 ? `<span style="font-size:11px;color:#52525b">↳ ${deps.join(", ")}</span>` : "");
+
+      const card = document.createElement("button");
+      card.className = "script-card";
+      card.id = `btn-${s._id}`;
+      card.disabled = bloqueado;
+      card.innerHTML = `
+        <span class="sc-nombre">${s.nombre}</span>
+        <span class="sc-desc">${s.descripcion || ""}</span>
+        <div class="sc-meta">
+          <span class="sc-badge badge-${tipo}">${labelTexto}</span>
+          ${depHtml}
+        </div>
+      `;
+      card.onclick = () => lanzarJob(s._id, s.nombre, s.tipo_envio, card);
+      cont.appendChild(card);
+    });
+  } catch (e) {
+    document.getElementById("scripts").innerHTML =
+      `<div style="color:#fca5a5;font-size:13px">Error al cargar scripts: ${e.message}</div>`;
+  }
+}
+
+// ─── Lanzar un job ───────────────────────────────────────────────────────────
+async function lanzarJob(scriptId, nombreScript, tipoEnvio, btn) {
+  btn.disabled = true;
+  try {
+    const { job_id } = await apiFetch(`/jobs?script_id=${scriptId}`, { method: "POST" });
+    crearTarjetaJob(job_id, nombreScript, tipoEnvio);
+    monitorearJob(job_id, tipoEnvio);
+  } catch (e) {
+    console.error("Error al lanzar job:", e);
+    alert(`No se pudo iniciar "${nombreScript}". Verifica que el backend esté activo.`);
+    btn.disabled = false;
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 3000);
+  }
+}
+
+// ─── Tarjeta de seguimiento ──────────────────────────────────────────────────
+function crearTarjetaJob(jobId, nombreScript = "", tipoEnvio = "ninguno") {
+  if (document.getElementById(`job-${jobId}`)) return;
+
   const div = document.createElement("div");
   div.className = "job-card";
   div.id = `job-${jobId}`;
+  div.dataset.tipoEnvio = tipoEnvio;
   div.innerHTML = `
-    <div><strong>${nombreScript}</strong> — Job: ${jobId} <span class="estado pendiente" id="estado-${jobId}">pendiente</span></div>
+    <div class="job-header">
+      <span class="job-nombre">${nombreScript}</span>
+      <span class="estado pendiente pulsando" id="estado-${jobId}">pendiente</span>
+      <span class="job-tiempo" id="tiempo-${jobId}"></span>
+      <span class="job-id-label">${jobId.slice(-8)}</span>
+    </div>
     <pre class="terminal" id="terminal-${jobId}"></pre>
     <div id="acciones-${jobId}"></div>
-    <div id="aviso-${jobId}"></div>
+    <div id="aviso-${jobId}" class="aviso"></div>
   `;
   document.getElementById("jobs").prepend(div);
 }
 
+// ─── Jobs recientes al cargar la página ─────────────────────────────────────
 const ESTADOS_ACTIVOS = ["pendiente", "ejecutando", "esperando_confirmacion", "cancelando"];
 
 async function cargarJobsRecientes() {
-  const jobs = await apiFetch("/jobs?limite=20");
-  for (const job of jobs) {
-    crearTarjetaJob(job._id, job.nombre_script);
-    actualizarTarjeta(job._id, job);
-    if (ESTADOS_ACTIVOS.includes(job.estado)) {
-      monitorearJob(job._id);
+  try {
+    const jobs = await apiFetch("/jobs?limite=20");
+    for (const job of jobs) {
+      const tipoEnvio = job.tipo_envio || "ninguno";
+      crearTarjetaJob(job._id, job.nombre_script, tipoEnvio);
+      actualizarTarjeta(job._id, job);
+      if (ESTADOS_ACTIVOS.includes(job.estado)) {
+        monitorearJob(job._id, tipoEnvio);
+      }
+      // Registrar finalizados para la verificación de dependencias
+      if (job.estado === "finalizado") {
+        ultimosFinalizados[job.nombre_script] = "finalizado";
+      }
     }
+  } catch (e) {
+    console.error("Error al cargar jobs recientes:", e);
   }
 }
 
-function monitorearJob(jobId) {
-  jobsActivos[jobId] = setInterval(async () => {
-    const job = await apiFetch(`/jobs/${jobId}`);
-    actualizarTarjeta(jobId, job);
+// ─── Polling de un job ───────────────────────────────────────────────────────
+function monitorearJob(jobId, tipoEnvio = "ninguno") {
+  if (jobsActivos[jobId]) return;
+  const tarjeta = document.getElementById(`job-${jobId}`);
+  if (tarjeta) tarjeta.classList.add("activo");
 
-    if (job.estado === "finalizado" || job.estado === "cancelado" || (job.estado === "error" && job.accion_usuario)) {
-      clearInterval(jobsActivos[jobId]);
+  jobsActivos[jobId] = setInterval(async () => {
+    try {
+      const job = await apiFetch(`/jobs/${jobId}`);
+      actualizarTarjeta(jobId, job);
+
+      if (job.estado === "finalizado") {
+        ultimosFinalizados[job.nombre_script] = "finalizado";
+        // Recargar scripts para actualizar estado de dependencias
+        cargarScripts();
+      }
+
+      const terminado = ["finalizado", "cancelado", "error"].includes(job.estado);
+      if (terminado) {
+        clearInterval(jobsActivos[jobId]);
+        delete jobsActivos[jobId];
+        if (tarjeta) tarjeta.classList.remove("activo");
+        verificarAgente();
+      }
+    } catch (e) {
+      console.error(`Error monitoreando job ${jobId}:`, e);
     }
   }, 2500);
 }
 
+// ─── Actualización de una tarjeta ───────────────────────────────────────────
 function actualizarTarjeta(jobId, job) {
   const estadoEl = document.getElementById(`estado-${jobId}`);
-  estadoEl.textContent = job.estado;
+  if (!estadoEl) return;
+
+  estadoEl.textContent = etiquetaEstado(job.estado);
   estadoEl.className = `estado ${job.estado}`;
 
-  const terminal = document.getElementById(`terminal-${jobId}`);
-  terminal.textContent = job.logs.join("\n");
-  terminal.scrollTop = terminal.scrollHeight;
-
-  const acciones = document.getElementById(`acciones-${jobId}`);
-  const aviso = document.getElementById(`aviso-${jobId}`);
-
-  if (job.estado === "error") {
-    aviso.innerHTML = `<div style="color:#f88">Error: ${job.error_mensaje || "sin detalle"}</div>`;
+  // Pulso solo para estados activos
+  if (["pendiente", "ejecutando"].includes(job.estado)) {
+    estadoEl.classList.add("pulsando");
+  } else {
+    estadoEl.classList.remove("pulsando");
   }
 
+  // Tiempo transcurrido
+  const tiempoEl = document.getElementById(`tiempo-${jobId}`);
+  if (tiempoEl && job.iniciado_en) {
+    const inicio = new Date(job.iniciado_en);
+    const fin    = job.finalizado_en ? new Date(job.finalizado_en) : new Date();
+    const segs   = Math.floor((fin - inicio) / 1000);
+    const mins   = Math.floor(segs / 60);
+    const resto  = segs % 60;
+    tiempoEl.textContent = mins > 0 ? `${mins}m ${resto}s` : `${segs}s`;
+  }
+
+  // Terminal
+  const terminal = document.getElementById(`terminal-${jobId}`);
+  if (terminal) {
+    const logs = job.logs || [];
+    if (logs.length) {
+      terminal.textContent = logs.join("\n");
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+  }
+
+  const acciones = document.getElementById(`acciones-${jobId}`);
+  const aviso    = document.getElementById(`aviso-${jobId}`);
+  const tipoEnvio = job.tipo_envio
+    || document.getElementById(`job-${jobId}`)?.dataset.tipoEnvio
+    || "ninguno";
+
+  aviso.innerHTML = "";
+  acciones.innerHTML = "";
+
+  // ── Botón cancelar durante ejecución ──
   if (job.estado === "pendiente" || job.estado === "ejecutando") {
     acciones.innerHTML = `
       <div class="acciones">
-        <button class="btn-cancelar" onclick="cancelar('${jobId}')">Cancelar automatización</button>
-      </div>
-    `;
+        <button class="btn-cancelar" onclick="cancelar('${jobId}')">✕ Cancelar</button>
+      </div>`;
+
+  // ── Confirmación de envío ──
   } else if (job.estado === "esperando_confirmacion" && !job.accion_usuario) {
     acciones.innerHTML = `
       <div class="acciones">
-        <button class="btn-enviar" onclick="decidir('${jobId}','enviar_correo')">Enviar por correo</button>
-        <button class="btn-reintentar" onclick="decidir('${jobId}','reejecutar_sin_correo')">Reejecutar sin enviar</button>
+        <button class="btn-enviar" onclick="decidir('${jobId}','enviar_correo')">
+          ✉ Enviar correo
+        </button>
+        <button class="btn-reintentar" onclick="decidir('${jobId}','reejecutar_sin_correo')">
+          ↩ Reejecutar sin enviar
+        </button>
       </div>
-    `;
-  } else {
-    acciones.innerHTML = "";
+      <div style="font-size:12px;color:#a1a1aa;margin-top:4px">
+        El script finalizó correctamente. ¿Enviamos el correo?
+      </div>`;
   }
 
-  if (job.estado === "cancelando") {
-    aviso.innerHTML = `<div style="color:#dda">Cancelando... esperando a que el agente detenga el proceso.</div>`;
+  // ── Avisos de estado ──
+  if (job.estado === "error") {
+    aviso.innerHTML = `<span class="aviso-error">✘ Error: ${job.error_mensaje || "sin detalle"}</span>`;
+  } else if (job.estado === "cancelando") {
+    aviso.innerHTML = `<span class="aviso-warn">⏳ Cancelando... el agente está deteniendo el proceso.</span>`;
   } else if (job.estado === "cancelado") {
-    aviso.innerHTML = `<div style="color:#aaa">Automatización cancelada por el usuario.</div>`;
+    aviso.innerHTML = `<span class="aviso-info">Automatización cancelada.</span>`;
+  } else if (job.estado === "finalizado" && tipoEnvio === "ninguno") {
+    aviso.innerHTML = `<span class="aviso-ok">✔ Finalizado correctamente.</span>`;
   }
 
+  // ── Estado del correo ──
   if (job.estado_correo === "enviado") {
-    aviso.innerHTML = `<div class="aviso-correo">✔ Correo enviado el ${new Date(job.correo_enviado_en).toLocaleString()}</div>`;
+    const fecha = job.correo_enviado_en
+      ? new Date(job.correo_enviado_en).toLocaleString("es-CO")
+      : "";
+    aviso.innerHTML = `<span class="aviso-ok">✉ Correo enviado${fecha ? " · " + fecha : ""}.</span>`;
   } else if (job.estado_correo === "error_envio") {
-    aviso.innerHTML = `<div style="color:#f88">✘ Falló el envío del correo</div>`;
+    aviso.innerHTML = `<span class="aviso-error">✘ Falló el envío del correo.</span>`;
   }
 }
 
+function etiquetaEstado(estado) {
+  const mapa = {
+    pendiente:              "pendiente",
+    ejecutando:             "ejecutando",
+    esperando_confirmacion: "esperando confirmación",
+    finalizado:             "finalizado",
+    error:                  "error",
+    cancelando:             "cancelando",
+    cancelado:              "cancelado",
+  };
+  return mapa[estado] || estado;
+}
+
+// ─── Acciones del usuario ────────────────────────────────────────────────────
 async function cancelar(jobId) {
-  await apiFetch(`/jobs/${jobId}/cancelar`, { method: "POST" });
-  document.getElementById(`acciones-${jobId}`).innerHTML = "Cancelando...";
+  try {
+    await apiFetch(`/jobs/${jobId}/cancelar`, { method: "POST" });
+    document.getElementById(`acciones-${jobId}`).innerHTML = "";
+    document.getElementById(`aviso-${jobId}`).innerHTML =
+      `<span class="aviso-warn">⏳ Cancelando...</span>`;
+  } catch (e) {
+    alert("No se pudo cancelar. Intenta de nuevo.");
+  }
 }
 
 async function decidir(jobId, accion) {
-  await apiFetch(`/jobs/${jobId}/action?accion=${accion}`, { method: "POST" });
-  document.getElementById(`acciones-${jobId}`).innerHTML = "Procesando...";
-  if (!jobsActivos[jobId]) monitorearJob(jobId); // por si el intervalo ya se había detenido
+  try {
+    await apiFetch(`/jobs/${jobId}/action?accion=${accion}`, { method: "POST" });
+    document.getElementById(`acciones-${jobId}`).innerHTML =
+      `<span style="color:#71717a;font-size:13px"><span class="spinner"></span> Procesando...</span>`;
+    if (!jobsActivos[jobId]) {
+      const tipoEnvio = document.getElementById(`job-${jobId}`)?.dataset.tipoEnvio || "ninguno";
+      monitorearJob(jobId, tipoEnvio);
+    }
+  } catch (e) {
+    alert("No se pudo registrar la acción. Intenta de nuevo.");
+  }
 }
 
+// ─── Arranque ────────────────────────────────────────────────────────────────
+verificarAgente();
 cargarScripts();
 cargarJobsRecientes();
+
+// Refrescar estado del agente cada 30 s
+setInterval(verificarAgente, 30_000);
 </script>
 </body>
 </html>

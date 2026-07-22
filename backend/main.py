@@ -21,7 +21,8 @@ def serialize(doc):
 
 @app.get("/scripts")
 async def listar_scripts():
-    scripts = await scripts_col.find({"activo": True}).to_list(100)
+    # Ordenar por el campo 'orden' si existe, luego por nombre
+    scripts = await scripts_col.find({"activo": True}).sort("orden", 1).to_list(100)
     return [serialize(s) for s in scripts]
 
 @app.post("/jobs")
@@ -57,6 +58,7 @@ async def ver_job(job_id: str):
     job = serialize(job)
     job["script_id"] = str(job["script_id"])
     job["nombre_script"] = script["nombre"] if script else "Desconocido"
+    job["tipo_envio"] = script.get("tipo_envio", "ninguno") if script else "ninguno"
     job["logs"] = [l["linea"] for l in logs]
     return job
 
@@ -69,6 +71,7 @@ async def listar_jobs(limite: int = 20):
         j = serialize(j)
         j["script_id"] = str(j["script_id"])
         j["nombre_script"] = script["nombre"] if script else "Desconocido"
+        j["tipo_envio"] = script.get("tipo_envio", "ninguno") if script else "ninguno"
         resultado.append(j)
     return resultado
 
@@ -100,6 +103,10 @@ async def jobs_pendientes(pc_id: str):
     return {
         "job_id": str(job["_id"]),
         "comando": script["comando"],
+        # Campos opcionales que el agente usa si están presentes
+        "comando_envio": script.get("comando_envio"),       # None si no hay envío separado
+        "tipo_envio": script.get("tipo_envio", "ninguno"),  # correo | automatico | ninguno
+        "dependencias": script.get("dependencias", []),     # lista de nombres de scripts
     }
 
 @app.post("/agente/jobs/{job_id}/log")
@@ -114,7 +121,16 @@ async def agregar_log(job_id: str, linea: str, stream: str = "stdout"):
 
 @app.post("/agente/jobs/{job_id}/finalizar")
 async def finalizar_job(job_id: str, exit_code: int, error_mensaje: str | None = None):
-    nuevo_estado = "esperando_confirmacion" if exit_code == 0 else "error"
+    job = await jobs_col.find_one({"_id": ObjectId(job_id)})
+    if not job:
+        raise HTTPException(404, "Job no encontrado")
+    
+    if exit_code == 0:
+        # Solo espera confirmación si el script la requiere
+        nuevo_estado = "esperando_confirmacion" if job.get("requiere_confirmacion") else "finalizado"
+    else:
+        nuevo_estado = "error"
+    
     await jobs_col.update_one(
         {"_id": ObjectId(job_id)},
         {"$set": {
