@@ -14,7 +14,15 @@ import time
 import subprocess
 import requests
 import threading
+import os
+import sys
 from datetime import date
+
+# Forzar UTF-8 en la consola del agente (Windows usa cp1252 por defecto)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 BACKEND_URL     = "https://pagepadre-akhc.onrender.com"
 PC_ID           = "pc-andres"
@@ -109,6 +117,8 @@ def ejecutar_job(job_id: str, comando: str) -> str:
         comando, shell=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
+        encoding="utf-8", errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
 
     cancelado = threading.Event()
@@ -192,6 +202,8 @@ def manejar_envio_correo(job_id: str, comando_envio: str | None, comando_origina
                         comando_envio, shell=True,
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1,
+                        encoding="utf-8", errors="replace",
+                        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                     )
                     for linea in proc.stdout:
                         linea = linea.rstrip()

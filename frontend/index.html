@@ -505,7 +505,6 @@ function actualizarTarjeta(jobId, job) {
         </div>
       </div>`;
   }
-  }
 
   // ── Avisos de estado ──
   if (job.estado === "error") {
@@ -527,7 +526,7 @@ function actualizarTarjeta(jobId, job) {
   } else if (job.estado_correo === "error_envio") {
     aviso.innerHTML = `<span class="aviso-error">✘ Falló el envío del correo.</span>`;
   }
-
+}
 
 function etiquetaEstado(estado) {
   const mapa = {
