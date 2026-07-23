@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from bson import ObjectId
 from datetime import datetime
-from backend.database import scripts_col, jobs_col, logs_col
+from database import scripts_col, jobs_col, logs_col
 
 app = FastAPI()
 
@@ -177,3 +177,40 @@ async def confirmar_cancelado(job_id: str):
         {"$set": {"estado": "cancelado", "finalizado_en": datetime.utcnow()}}
     )
     return {"ok": True}
+
+
+# ---------- MANTENIMIENTO ----------
+
+@app.delete("/jobs/historial")
+async def limpiar_historial(estado: str = "todos"):
+    """
+    Elimina jobs (y sus logs) del historial.
+
+    Parámetros:
+      estado = "todos"       → elimina todos los jobs (excepto los que están ejecutando/pendiente)
+      estado = "finalizados" → solo finalizado, error, cancelado
+    """
+    estados_activos = {"pendiente", "ejecutando", "cancelando", "esperando_confirmacion"}
+
+    if estado == "todos":
+        # Eliminar todo excepto los activos en este momento
+        query_jobs = {"estado": {"$nin": list(estados_activos)}}
+    elif estado == "finalizados":
+        query_jobs = {"estado": {"$in": ["finalizado", "error", "cancelado"]}}
+    else:
+        raise HTTPException(400, "estado debe ser 'todos' o 'finalizados'")
+
+    # Recoger IDs de los jobs a eliminar para borrar sus logs también
+    jobs_a_borrar = await jobs_col.find(query_jobs, {"_id": 1}).to_list(10000)
+    ids = [j["_id"] for j in jobs_a_borrar]
+
+    if not ids:
+        return {"eliminados": 0, "logs_eliminados": 0}
+
+    res_jobs = await jobs_col.delete_many({"_id": {"$in": ids}})
+    res_logs = await logs_col.delete_many({"job_id": {"$in": ids}})
+
+    return {
+        "eliminados": res_jobs.deleted_count,
+        "logs_eliminados": res_logs.deleted_count,
+    }

@@ -187,6 +187,16 @@
   /* ── Tiempo transcurrido ── */
   .job-tiempo { font-size: 11px; color: #52525b; margin-left: 4px; }
 
+  /* ── Botones de limpiar historial ── */
+  .btn-limpiar {
+    padding: 6px 14px; border-radius: 7px; border: 1px solid #3f3f46;
+    background: #1c1c1f; color: #a1a1aa; cursor: pointer;
+    font-size: 12px; font-weight: 500;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .btn-limpiar:hover { background: #27272a; color: #f4f4f5; border-color: #52525b; }
+  .btn-limpiar-todo:hover { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
+
   /* ── Animación pulso para ejecutando ── */
   @keyframes pulso { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
   .pulsando { animation: pulso 1.5s ease-in-out infinite; }
@@ -221,10 +231,19 @@
 </div>
 
 <p class="seccion-titulo">Ejecuciones recientes</p>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+  <button class="btn-limpiar" id="btn-limpiar-finalizados" onclick="limpiarHistorial('finalizados')">
+    🗑 Limpiar finalizados
+  </button>
+  <button class="btn-limpiar btn-limpiar-todo" id="btn-limpiar-todos" onclick="limpiarHistorial('todos')">
+    🗑 Limpiar todo
+  </button>
+  <span id="limpiar-status" style="font-size:12px;color:#71717a"></span>
+</div>
 <div id="jobs" class="jobs-lista"></div>
 
 <script>
-const BACKEND_URL = "https://pagepadre.onrender.com";
+const BACKEND_URL = "https://pagepadre-akhc.onrender.com";
 
 // job_id → intervalId
 const jobsActivos = {};
@@ -290,8 +309,8 @@ async function cargarScripts() {
     scripts.forEach(s => {
       const tipo = s.tipo_envio || "ninguno";
       const labelTexto = {
-        correo:     "✉ Con confirmación de correo",
-        automatico: "⚡ Envío automático",
+        correo:     "✉ Confirmar antes de enviar",
+        automatico: "⚡ Envío automático al terminar",
         ninguno:    "Sin envío",
       }[tipo] || "Sin envío";
 
@@ -469,18 +488,23 @@ function actualizarTarjeta(jobId, job) {
 
   // ── Confirmación de envío ──
   } else if (job.estado === "esperando_confirmacion" && !job.accion_usuario) {
+    const nombreScript = job.nombre_script || document.querySelector(`#job-${jobId} .job-nombre`)?.textContent || "";
     acciones.innerHTML = `
-      <div class="acciones">
-        <button class="btn-enviar" onclick="decidir('${jobId}','enviar_correo')">
-          ✉ Enviar correo
-        </button>
-        <button class="btn-reintentar" onclick="decidir('${jobId}','reejecutar_sin_correo')">
-          ↩ Reejecutar sin enviar
-        </button>
-      </div>
-      <div style="font-size:12px;color:#a1a1aa;margin-top:4px">
-        El script finalizó correctamente. ¿Enviamos el correo?
+      <div style="background:#1a1a1e;border:1px solid #3f3f46;border-radius:8px;padding:14px;margin-bottom:8px">
+        <p style="font-size:13px;color:#a1a1aa;margin:0 0 10px">
+          ✅ <strong style="color:#f4f4f5">${nombreScript}</strong> finalizó correctamente.
+          ¿Querés enviar el correo ahora?
+        </p>
+        <div class="acciones">
+          <button class="btn-enviar" onclick="decidir('${jobId}','enviar_correo')">
+            ✉ Sí, enviar correo
+          </button>
+          <button class="btn-reintentar" onclick="decidir('${jobId}','reejecutar_sin_correo')">
+            ↩ No, reejecutar sin enviar
+          </button>
+        </div>
       </div>`;
+  }
   }
 
   // ── Avisos de estado ──
@@ -503,7 +527,7 @@ function actualizarTarjeta(jobId, job) {
   } else if (job.estado_correo === "error_envio") {
     aviso.innerHTML = `<span class="aviso-error">✘ Falló el envío del correo.</span>`;
   }
-}
+
 
 function etiquetaEstado(estado) {
   const mapa = {
@@ -541,6 +565,31 @@ async function decidir(jobId, accion) {
     }
   } catch (e) {
     alert("No se pudo registrar la acción. Intenta de nuevo.");
+  }
+}
+
+// ─── Limpiar historial ───────────────────────────────────────────────────────
+async function limpiarHistorial(modo) {
+  const labels = { finalizados: "los jobs finalizados/error/cancelados", todos: "TODO el historial" };
+  if (!confirm(`¿Eliminar ${labels[modo]}?\n\nLos jobs activos (ejecutando/pendientes) no se tocan.`)) return;
+
+  const statusEl = document.getElementById("limpiar-status");
+  statusEl.textContent = "Eliminando...";
+
+  try {
+    const res = await apiFetch(`/jobs/historial?estado=${modo}`, { method: "DELETE" });
+    statusEl.textContent = `✔ Eliminados ${res.eliminados} jobs y ${res.logs_eliminados} logs`;
+    // Limpiar las tarjetas del DOM también
+    document.getElementById("jobs").innerHTML = "";
+    // Limpiar el mapa de jobs activos
+    for (const id in jobsActivos) {
+      clearInterval(jobsActivos[id]);
+      delete jobsActivos[id];
+    }
+    setTimeout(() => { statusEl.textContent = ""; }, 4000);
+  } catch (e) {
+    statusEl.textContent = `✘ Error al limpiar: ${e.message}`;
+    console.error(e);
   }
 }
 

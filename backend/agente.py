@@ -16,7 +16,7 @@ import requests
 import threading
 from datetime import date
 
-BACKEND_URL     = "https://pagepadre.onrender.com"
+BACKEND_URL     = "https://pagepadre-akhc.onrender.com"
 PC_ID           = "pc-andres"
 INTERVALO_SONDEO = 8   # segundos
 
@@ -184,26 +184,36 @@ def manejar_envio_correo(job_id: str, comando_envio: str | None, comando_origina
         if accion == "enviar_correo":
             exito = True
             if comando_envio:
-                # Hay un script/comando separado para el envío
+                # Hay un comando separado para el envío — lo ejecutamos capturando salida
                 print(f"[agente] Ejecutando envío para job {job_id}: {comando_envio}")
-                log_job(job_id, "[agente] Iniciando envío de correo...")
-                proc = subprocess.run(
-                    comando_envio, shell=True, capture_output=True, text=True
-                )
-                if proc.returncode != 0:
-                    exito = False
-                    log_job(
-                        job_id,
-                        proc.stderr or f"[agente] Error al enviar correo (código {proc.returncode})",
-                        "stderr"
+                log_job(job_id, "─── Iniciando envío de correo... ───")
+                try:
+                    proc = subprocess.Popen(
+                        comando_envio, shell=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True, bufsize=1,
                     )
-                else:
-                    for l in proc.stdout.splitlines():
-                        log_job(job_id, l)
-                    log_job(job_id, "[agente] Correo enviado correctamente.")
+                    for linea in proc.stdout:
+                        linea = linea.rstrip()
+                        print(linea)
+                        log_job(job_id, linea)
+                    proc.wait()
+                    if proc.returncode != 0:
+                        exito = False
+                        log_job(
+                            job_id,
+                            f"[agente] Error al enviar correo (código {proc.returncode})",
+                            "stderr"
+                        )
+                    else:
+                        log_job(job_id, "✅ Correo enviado correctamente.")
+                except Exception as e:
+                    exito = False
+                    log_job(job_id, f"[agente] Excepción al ejecutar envío: {e}", "stderr")
             else:
-                # El envío está embebido en el script — solo confirmamos
-                log_job(job_id, "[agente] Envío confirmado por el usuario.")
+                # Sin comando_envio: el script ya envió solo (tipo "automatico")
+                # o simplemente confirmamos sin hacer nada adicional
+                log_job(job_id, "✅ Envío confirmado por el usuario.")
 
             try:
                 requests.post(
@@ -280,8 +290,19 @@ def loop_principal():
                     estado = job_actual.get("estado")
 
                     if estado == "esperando_confirmacion":
-                        # El script requiere que el usuario confirme desde el dashboard
-                        manejar_envio_correo(job_id, comando_envio, comando)
+                        if tipo_envio == "automatico":
+                            # El script ya envió solo — solo cerramos el job
+                            print(f"[agente] Job {job_id} (automatico): marcando como finalizado.")
+                            try:
+                                requests.post(
+                                    f"{BACKEND_URL}/agente/jobs/{job_id}/correo-enviado",
+                                    params={"exito": True}, timeout=5,
+                                )
+                            except requests.RequestException:
+                                pass
+                        else:
+                            # El usuario debe confirmar desde el dashboard
+                            manejar_envio_correo(job_id, comando_envio, comando)
 
                     elif estado == "finalizado":
                         print(f"[agente] Job {job_id} finalizado automáticamente.")
