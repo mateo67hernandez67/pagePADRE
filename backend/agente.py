@@ -118,7 +118,7 @@ def ejecutar_job(job_id: str, comando: str) -> str:
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
         encoding="utf-8", errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"},
     )
 
     cancelado = threading.Event()
@@ -141,7 +141,7 @@ def ejecutar_job(job_id: str, comando: str) -> str:
 
     for linea in proceso.stdout:
         linea = linea.rstrip()
-        print(linea)
+        print(linea, flush=True)
         log_job(job_id, linea)
 
     proceso.wait()
@@ -203,11 +203,11 @@ def manejar_envio_correo(job_id: str, comando_envio: str | None, comando_origina
                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                         text=True, bufsize=1,
                         encoding="utf-8", errors="replace",
-                        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"},
                     )
                     for linea in proc.stdout:
                         linea = linea.rstrip()
-                        print(linea)
+                        print(linea, flush=True)
                         log_job(job_id, linea)
                     proc.wait()
                     if proc.returncode != 0:
