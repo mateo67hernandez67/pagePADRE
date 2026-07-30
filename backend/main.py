@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from bson import ObjectId
 from datetime import datetime
-from backend.database import scripts_col, jobs_col, logs_col
+from database import scripts_col, jobs_col, logs_col
 
 app = FastAPI()
 
@@ -17,13 +17,14 @@ def serialize(doc):
     doc["_id"] = str(doc["_id"])
     return doc
 
-# ---------- ENDPOINTS QUE USA EL FRONTEND ----------
+# ---------- SCRIPTS ----------
 
 @app.get("/scripts")
 async def listar_scripts():
-    # Ordenar por el campo 'orden' si existe, luego por nombre
     scripts = await scripts_col.find({"activo": True}).sort("orden", 1).to_list(100)
     return [serialize(s) for s in scripts]
+
+# ---------- JOBS (FRONTEND) ----------
 
 @app.post("/jobs")
 async def crear_job(script_id: str):
@@ -44,9 +45,29 @@ async def crear_job(script_id: str):
         "estado_correo": "no_enviado",
         "correo_enviado_en": None,
         "accion_usuario": None,
+        # Datos extra que algunos scripts guardan (ej: resultado de cierres)
+        "datos_resultado": None,
     }
     result = await jobs_col.insert_one(job)
+
+    # Mantener solo las 2 ejecuciones más recientes por script (borrar las anteriores)
+    await _limpiar_historial_script(ObjectId(script_id), mantener=2)
+
     return {"job_id": str(result.inserted_id)}
+
+
+async def _limpiar_historial_script(script_id: ObjectId, mantener: int = 2):
+    """Elimina los jobs más antiguos de un script dejando solo los N más recientes."""
+    estados_activos = {"pendiente", "ejecutando", "cancelando", "esperando_confirmacion"}
+    todos = await jobs_col.find(
+        {"script_id": script_id, "estado": {"$nin": list(estados_activos)}}
+    ).sort("creado_en", -1).to_list(1000)
+
+    if len(todos) > mantener:
+        ids_borrar = [j["_id"] for j in todos[mantener:]]
+        await jobs_col.delete_many({"_id": {"$in": ids_borrar}})
+        await logs_col.delete_many({"job_id": {"$in": ids_borrar}})
+
 
 @app.get("/jobs/{job_id}")
 async def ver_job(job_id: str):
@@ -62,6 +83,7 @@ async def ver_job(job_id: str):
     job["logs"] = [l["linea"] for l in logs]
     return job
 
+
 @app.get("/jobs")
 async def listar_jobs(limite: int = 20):
     jobs = await jobs_col.find().sort("creado_en", -1).to_list(limite)
@@ -75,19 +97,56 @@ async def listar_jobs(limite: int = 20):
         resultado.append(j)
     return resultado
 
+
+@app.get("/jobs/por-script/{script_id}")
+async def jobs_por_script(script_id: str):
+    """Devuelve los últimos 2 jobs de un script específico con sus logs."""
+    jobs = await jobs_col.find(
+        {"script_id": ObjectId(script_id)}
+    ).sort("creado_en", -1).to_list(2)
+
+    resultado = []
+    for j in jobs:
+        logs = await logs_col.find({"job_id": j["_id"]}).sort("timestamp", 1).to_list(1000)
+        script = await scripts_col.find_one({"_id": j["script_id"]})
+        j = serialize(j)
+        j["script_id"] = str(j["script_id"])
+        j["nombre_script"] = script["nombre"] if script else "Desconocido"
+        j["tipo_envio"] = script.get("tipo_envio", "ninguno") if script else "ninguno"
+        j["logs"] = [l["linea"] for l in logs]
+        resultado.append(j)
+    return resultado
+
+
 @app.post("/jobs/{job_id}/action")
 async def confirmar_accion(job_id: str, accion: str):
-    # accion: "enviar_correo" | "reejecutar_sin_correo"
     if accion not in ("enviar_correo", "reejecutar_sin_correo"):
         raise HTTPException(400, "Acción inválida")
-
     await jobs_col.update_one(
         {"_id": ObjectId(job_id)},
         {"$set": {"accion_usuario": accion}}
     )
     return {"ok": True}
 
-# ---------- ENDPOINTS QUE USA EL AGENTE (PC LOCAL) ----------
+
+@app.post("/jobs/{job_id}/cancelar")
+async def cancelar_job(job_id: str):
+    job = await jobs_col.find_one({"_id": ObjectId(job_id)})
+    if not job:
+        raise HTTPException(404, "Job no encontrado")
+
+    if job["estado"] == "pendiente":
+        nuevo_estado = "cancelado"
+    elif job["estado"] == "ejecutando":
+        nuevo_estado = "cancelando"
+    else:
+        raise HTTPException(400, "Este job ya no se puede cancelar")
+
+    await jobs_col.update_one({"_id": ObjectId(job_id)}, {"$set": {"estado": nuevo_estado}})
+    return {"ok": True}
+
+
+# ---------- JOBS (AGENTE) ----------
 
 @app.get("/agente/pendientes")
 async def jobs_pendientes(pc_id: str):
@@ -103,11 +162,11 @@ async def jobs_pendientes(pc_id: str):
     return {
         "job_id": str(job["_id"]),
         "comando": script["comando"],
-        # Campos opcionales que el agente usa si están presentes
-        "comando_envio": script.get("comando_envio"),       # None si no hay envío separado
-        "tipo_envio": script.get("tipo_envio", "ninguno"),  # correo | automatico | ninguno
-        "dependencias": script.get("dependencias", []),     # lista de nombres de scripts
+        "comando_envio": script.get("comando_envio"),
+        "tipo_envio": script.get("tipo_envio", "ninguno"),
+        "dependencias": script.get("dependencias", []),
     }
+
 
 @app.post("/agente/jobs/{job_id}/log")
 async def agregar_log(job_id: str, linea: str, stream: str = "stdout"):
@@ -119,18 +178,18 @@ async def agregar_log(job_id: str, linea: str, stream: str = "stdout"):
     })
     return {"ok": True}
 
+
 @app.post("/agente/jobs/{job_id}/finalizar")
 async def finalizar_job(job_id: str, exit_code: int, error_mensaje: str | None = None):
     job = await jobs_col.find_one({"_id": ObjectId(job_id)})
     if not job:
         raise HTTPException(404, "Job no encontrado")
-    
+
     if exit_code == 0:
-        # Solo espera confirmación si el script la requiere
         nuevo_estado = "esperando_confirmacion" if job.get("requiere_confirmacion") else "finalizado"
     else:
         nuevo_estado = "error"
-    
+
     await jobs_col.update_one(
         {"_id": ObjectId(job_id)},
         {"$set": {
@@ -141,6 +200,20 @@ async def finalizar_job(job_id: str, exit_code: int, error_mensaje: str | None =
         }}
     )
     return {"ok": True}
+
+
+@app.post("/agente/jobs/{job_id}/resultado")
+async def guardar_resultado(job_id: str, datos: dict):
+    """
+    Guarda datos estructurados del resultado de un script.
+    Usado por Verificar Cierres para mostrar la tabla de resultados en el panel.
+    """
+    await jobs_col.update_one(
+        {"_id": ObjectId(job_id)},
+        {"$set": {"datos_resultado": datos}}
+    )
+    return {"ok": True}
+
 
 @app.post("/agente/jobs/{job_id}/correo-enviado")
 async def confirmar_correo_enviado(job_id: str, exito: bool):
@@ -154,21 +227,6 @@ async def confirmar_correo_enviado(job_id: str, exito: bool):
     )
     return {"ok": True}
 
-@app.post("/jobs/{job_id}/cancelar")
-async def cancelar_job(job_id: str):
-    job = await jobs_col.find_one({"_id": ObjectId(job_id)})
-    if not job:
-        raise HTTPException(404, "Job no encontrado")
-
-    if job["estado"] == "pendiente":
-        nuevo_estado = "cancelado"  # nunca llegó a arrancar, se cancela directo
-    elif job["estado"] == "ejecutando":
-        nuevo_estado = "cancelando"  # el agente lo va a detectar y matar el proceso
-    else:
-        raise HTTPException(400, "Este job ya no se puede cancelar")
-
-    await jobs_col.update_one({"_id": ObjectId(job_id)}, {"$set": {"estado": nuevo_estado}})
-    return {"ok": True}
 
 @app.post("/agente/jobs/{job_id}/cancelado")
 async def confirmar_cancelado(job_id: str):
@@ -183,24 +241,15 @@ async def confirmar_cancelado(job_id: str):
 
 @app.delete("/jobs/historial")
 async def limpiar_historial(estado: str = "todos"):
-    """
-    Elimina jobs (y sus logs) del historial.
-
-    Parámetros:
-      estado = "todos"       → elimina todos los jobs (excepto los que están ejecutando/pendiente)
-      estado = "finalizados" → solo finalizado, error, cancelado
-    """
     estados_activos = {"pendiente", "ejecutando", "cancelando", "esperando_confirmacion"}
 
     if estado == "todos":
-        # Eliminar todo excepto los activos en este momento
         query_jobs = {"estado": {"$nin": list(estados_activos)}}
     elif estado == "finalizados":
         query_jobs = {"estado": {"$in": ["finalizado", "error", "cancelado"]}}
     else:
         raise HTTPException(400, "estado debe ser 'todos' o 'finalizados'")
 
-    # Recoger IDs de los jobs a eliminar para borrar sus logs también
     jobs_a_borrar = await jobs_col.find(query_jobs, {"_id": 1}).to_list(10000)
     ids = [j["_id"] for j in jobs_a_borrar]
 

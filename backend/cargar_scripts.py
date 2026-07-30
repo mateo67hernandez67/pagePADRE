@@ -52,16 +52,13 @@ scripts = [
     },
 
     # ── 2. Brownfield ─────────────────────────────────────────────────────────
-    # Brown.py ya tiene el envío embebido con Outlook (mail.Send()).
-    # Lo marcamos como "automatico": envía solo al terminar, sin confirmación.
-    # Depende de Verificar Cierres.
     {
         "nombre": "Brownfield",
         "descripcion": "Seguimiento Migración Brownfield OTC R3 — requiere Verificar Cierres",
         "comando": f'python "{BASE}\\autBrown\\Brown.py"',
         "pc_id": PC_ID,
-        "tipo_envio": "automatico",
-        "requiere_confirmacion_correo": False,
+        "tipo_envio": "correo",
+        "requiere_confirmacion_correo": True,
         "comando_envio": None,
         "dependencias": ["Verificar Cierres"],
         "orden": 2,
@@ -70,8 +67,6 @@ scripts = [
     },
 
     # ── 3. Power Aut (Afectación) ─────────────────────────────────────────────
-    # poweraut.py extrae los datos y actualiza el Excel, pero NO envía correo.
-    # Al confirmar en el dashboard, el agente ejecuta enviar_correo.py.
     {
         "nombre": "Power Aut (Afectación)",
         "descripcion": "Extrae BackLog de Power BI y actualiza Excel de afectación/desempeño",
@@ -87,16 +82,14 @@ scripts = [
     },
 
     # ── 4. Backlog Mantenimiento ──────────────────────────────────────────────
-    # backlog.py ya tiene el envío embebido (send_email_outlook).
-    # Lo marcamos como "automatico".
     {
         "nombre": "Backlog Mantenimiento",
         "descripcion": "Descarga el reporte de backlog de mantenimiento y lo envía por correo",
         "comando": f'python "{BASE}\\mantenimientoaut\\backlog.py"',
         "pc_id": PC_ID,
-        "tipo_envio": "automatico",
-        "requiere_confirmacion_correo": False,
-        "comando_envio": None,
+        "tipo_envio": "correo",
+        "requiere_confirmacion_correo": True,
+        "comando_envio": f'python "{BASE}\\mantenimientoaut\\enviar_backlog.py"',
         "dependencias": [],
         "orden": 4,
         "activo": True,
@@ -104,15 +97,13 @@ scripts = [
     },
 
     # ── 5. ClaroBox ──────────────────────────────────────────────────────────
-    # copia.py ya tiene el envío embebido (enviar_correo → mail.Send()).
-    # Lo marcamos como "automatico".
     {
         "nombre": "ClaroBox",
         "descripcion": "Refresca datos de Claro Box y envía tabla por correo",
         "comando": f'python "{BASE}\\ClaroBoxaut\\copia.py"',
         "pc_id": PC_ID,
-        "tipo_envio": "automatico",
-        "requiere_confirmacion_correo": False,
+        "tipo_envio": "correo",
+        "requiere_confirmacion_correo": True,
         "comando_envio": None,
         "dependencias": [],
         "orden": 5,

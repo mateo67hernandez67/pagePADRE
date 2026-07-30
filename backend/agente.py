@@ -118,7 +118,8 @@ def ejecutar_job(job_id: str, comando: str) -> str:
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
         encoding="utf-8", errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"},
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1",
+             "JOB_ID": job_id, "BACKEND_URL": BACKEND_URL},
     )
 
     cancelado = threading.Event()
