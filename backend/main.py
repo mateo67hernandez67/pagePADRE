@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from bson import ObjectId
 from datetime import datetime
-from database import scripts_col, jobs_col, logs_col
+from backend.database import scripts_col, jobs_col, logs_col
 
 app = FastAPI()
 
