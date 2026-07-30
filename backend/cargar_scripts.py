@@ -35,18 +35,16 @@ PC_ID = "pc-andres"
 scripts = [
 
     # ── 1. Verificar Cierres ──────────────────────────────────────────────────
-    # El script verifica el Excel y guarda resultado_cierres.json.
-    # NO envía correo por sí solo.
-    # Al confirmar en el dashboard, el agente lo vuelve a llamar con --enviar-correo
-    # que lee el JSON y lo envía por Outlook.
+    # Verifica el Excel, envía correo automáticamente al terminar.
+    # No requiere confirmación del usuario.
     {
         "nombre": "Verificar Cierres",
-        "descripcion": "Verifica cierres por tipo de trabajo y notifica por correo",
+        "descripcion": "Verifica cierres por tipo de trabajo y envía correo automáticamente",
         "comando": f'python "{BASE}\\CierresAuto\\verificar_cierres.py"',
         "pc_id": PC_ID,
-        "tipo_envio": "correo",
-        "requiere_confirmacion_correo": True,
-        "comando_envio": f'python "{BASE}\\CierresAuto\\verificar_cierres.py" --enviar-correo',
+        "tipo_envio": "automatico",
+        "requiere_confirmacion_correo": False,
+        "comando_envio": None,
         "dependencias": [],
         "orden": 1,
         "activo": True,
