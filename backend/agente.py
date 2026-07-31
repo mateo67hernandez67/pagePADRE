@@ -90,8 +90,21 @@ def dependencias_cumplidas(dependencias: list) -> tuple[bool, list]:
         if job.get("estado") != "finalizado":
             continue
         finalizado_en = job.get("finalizado_en", "")
-        if finalizado_en and finalizado_en[:10] == hoy:
-            finalizados_hoy.add(job.get("nombre_script", ""))
+        if not (finalizado_en and finalizado_en[:10] == hoy):
+            continue
+        nombre = job.get("nombre_script", "")
+        if not nombre:
+            continue
+
+        # Si el job tiene datos_resultado (ej: Verificar Cierres), verificar que todo esté correcto
+        datos = job.get("datos_resultado")
+        if datos is not None:
+            # Solo considerar exitoso si todos los resultados están correctos
+            if not datos.get("todos_correctos", True):
+                print(f"[agente] Dependencia '{nombre}' finalizo pero con resultados INCORRECTOS — no cuenta como exitosa")
+                continue
+
+        finalizados_hoy.add(nombre)
 
     for dep in dependencias:
         if dep not in finalizados_hoy:

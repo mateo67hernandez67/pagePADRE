@@ -435,6 +435,13 @@ function crearTarjetaJob(job, numero, total) {
             id="chip-${job._id}">${etiqueta(job.estado)}</span>
       <span class="exec-tiempo" id="tiempo-${job._id}"></span>
       <span style="font-size:11px;color:#444;margin-left:4px">${ts}</span>
+      <button title="Eliminar esta ejecución"
+              onclick="eliminarEjecucion('${job._id}', this)"
+              style="margin-left:auto;background:none;border:none;cursor:pointer;
+                     color:#444;font-size:16px;line-height:1;padding:2px 4px;
+                     border-radius:4px;transition:color 0.15s"
+              onmouseover="this.style.color='#ff6b6b'"
+              onmouseout="this.style.color='#444'">✕</button>
     </div>
     <pre class="terminal" id="terminal-${job._id}"></pre>
     <div id="resultado-${job._id}"></div>
@@ -644,6 +651,45 @@ function etiqueta(estado) {
     cancelando: "cancelando",
     cancelado: "cancelado",
   }[estado] || estado;
+}
+
+// ─── Eliminar ejecución individual ────────────────────────────────────────
+async function eliminarEjecucion(jobId, btnEl) {
+  // Si hay un intervalo activo, no permitir borrar
+  if (jobsActivos[jobId]) {
+    alert("No se puede eliminar una ejecución activa.");
+    return;
+  }
+  // Animar y eliminar en backend
+  const card = document.getElementById(`job-${jobId}`);
+  if (card) {
+    card.style.opacity = "0.4";
+    card.style.transition = "opacity 0.2s";
+  }
+  try {
+    // Reusar el endpoint de historial pero solo para este job específico
+    // Como no hay endpoint individual, usamos el de limpiar solo ese job
+    await api(`/jobs/${jobId}/eliminar`, { method: "DELETE" });
+  } catch {
+    // Si el endpoint no existe aún, solo lo ocultamos del DOM
+  }
+  if (card) {
+    card.style.transition = "opacity 0.3s, max-height 0.3s";
+    card.style.opacity = "0";
+    card.style.overflow = "hidden";
+    card.style.maxHeight = card.offsetHeight + "px";
+    setTimeout(() => {
+      card.style.maxHeight = "0";
+      card.style.marginBottom = "0";
+      card.style.padding = "0";
+      card.style.border = "none";
+    }, 50);
+    setTimeout(() => card.remove(), 400);
+  }
+  if (jobsActivos[jobId]) {
+    clearInterval(jobsActivos[jobId]);
+    delete jobsActivos[jobId];
+  }
 }
 
 // ─── Arranque ─────────────────────────────────────────────────────────────

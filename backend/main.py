@@ -239,6 +239,20 @@ async def confirmar_cancelado(job_id: str):
 
 # ---------- MANTENIMIENTO ----------
 
+@app.delete("/jobs/{job_id}/eliminar")
+async def eliminar_job(job_id: str):
+    """Elimina un job individual y sus logs."""
+    job = await jobs_col.find_one({"_id": ObjectId(job_id)})
+    if not job:
+        raise HTTPException(404, "Job no encontrado")
+    estados_activos = {"pendiente", "ejecutando", "cancelando", "esperando_confirmacion"}
+    if job["estado"] in estados_activos:
+        raise HTTPException(400, "No se puede eliminar un job activo")
+    await jobs_col.delete_one({"_id": ObjectId(job_id)})
+    await logs_col.delete_many({"job_id": ObjectId(job_id)})
+    return {"ok": True}
+
+
 @app.delete("/jobs/historial")
 async def limpiar_historial(estado: str = "todos"):
     estados_activos = {"pendiente", "ejecutando", "cancelando", "esperando_confirmacion"}
